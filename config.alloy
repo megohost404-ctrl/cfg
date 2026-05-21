@@ -1,0 +1,321 @@
+// ============================================
+// USB Logs (Подключение внешних устройств)
+// ============================================
+loki.source.windowsevent "usb" {
+    eventlog_name          = "Microsoft-Windows-DriverFrameworks-UserMode/Operational"
+    xpath_query            = "*"
+    bookmark_path          = "./bookmark-usb.xml"
+    poll_interval          = "0s"
+    use_incoming_timestamp = true
+    forward_to             = [loki.process.usb.receiver]
+    labels                 = {
+        job      = "windows_usb",
+        host     = constants.hostname,
+    }
+}
+
+loki.process "usb" {
+    forward_to = [loki.write.loki.receiver]
+
+    stage.json {
+        expressions = {
+            event_id    = "event_id",
+            computer    = "computer",
+            timeCreated = "timeCreated",
+            event_data  = "event_data",
+            message     = "message",
+        }
+    }
+
+    // Извлекаем серийный номер из InstanceId (это ваш SDI номер)
+    stage.regex {
+        source     = "event_data"
+        expression = "#(?P<usb_serial>[^#]+)"
+    }
+
+    // Извлекаем тип устройства
+    stage.regex {
+        source     = "event_data"
+        expression = "VID_(?P<usb_vid>[^&]+)&PID_(?P<usb_pid>[^#]+)"
+    }
+
+    stage.labels {
+        values = {
+            event_id    = "",
+            usb_serial  = "",
+            usb_vid     = "",
+            usb_pid     = "",
+            computer    = "",
+        }
+    }
+
+    stage.timestamp {
+        source = "timeCreated"
+        format = "RFC3339"
+    }
+}
+
+// ============================================
+// System Logs (Критические ошибки системы)
+// ============================================
+loki.source.windowsevent "system" {
+    eventlog_name          = "System"
+    xpath_query            = "*"
+    bookmark_path          = "./bookmark-system.xml"
+    poll_interval          = "0s"
+    use_incoming_timestamp = true
+    forward_to             = [loki.process.system.receiver]
+    labels                 = {
+        job      = "windows_system",
+        host     = constants.hostname,
+    }
+}
+
+loki.process "system" {
+    forward_to = [loki.write.loki.receiver]
+
+    stage.json {
+        expressions = {
+            event_id    = "event_id",
+            computer    = "computer",
+            timeCreated = "timeCreated",
+            level       = "level",
+            levelText   = "levelText",
+            message     = "message",
+            source      = "source",
+        }
+    }
+
+    stage.labels {
+        values = {
+            event_id    = "",
+            computer    = "",
+            level       = "",
+            levelText   = "",
+            source      = "",
+        }
+    }
+
+    stage.timestamp {
+        source = "timeCreated"
+        format = "RFC3339"
+    }
+}
+
+// ============================================
+// Security Logs (Входы/Выходы)
+// ============================================
+loki.source.windowsevent "security" {
+    eventlog_name = "Security"
+    xpath_query   = "*[System[(EventID=4624 or EventID=4634 or EventID=4647)]]"
+    forward_to    = [loki.process.security.receiver]
+    labels        = { job = "windows_security" }
+}
+
+loki.process "security" {
+    forward_to = [loki.write.loki.receiver]
+    
+    stage.json {
+        expressions = {
+            event_id    = "event_id",
+            computer    = "computer",
+            timeCreated = "timeCreated",
+            event_data  = "event_data",
+        }
+    }
+
+    stage.replace {
+        source     = "event_data"
+        expression = "\\\\u003c"
+        replace    = "<"
+    }
+    stage.replace {
+        source     = "event_data"
+        expression = "\\\\u003e"
+        replace    = ">"
+    }
+
+    stage.regex {
+        source     = "event_data"
+        expression = "<Data Name='TargetUserName'>(?P<username>[^<]+)</Data>"
+    }
+    stage.regex {
+        source     = "event_data"
+        expression = "<Data Name='TargetDomainName'>(?P<domain>[^<]+)</Data>"
+    }
+    stage.regex {
+        source     = "event_data"
+        expression = "<Data Name='LogonType'>(?P<logon_type>[^<]+)</Data>"
+    }
+
+    stage.labels {
+        values = {
+            event_id    = "",
+            computer    = "",
+            username    = "",
+            domain      = "",
+            logon_type  = "",
+        }
+    }
+
+    stage.timestamp {
+        source = "timeCreated"
+        format = "RFC3339"
+    }
+}
+
+// ============================================
+// Application Logs (Установка/Удаление программ)
+// ============================================
+loki.source.windowsevent "application" {
+    eventlog_name          = "Application"
+    xpath_query            = "*"
+    bookmark_path          = "./bookmark-application.xml"
+    poll_interval          = "0s"
+    use_incoming_timestamp = true
+    forward_to             = [loki.process.application.receiver]
+    labels                 = {
+        job      = "windows_application",
+        host     = constants.hostname,
+    }
+}
+
+loki.process "application" {
+    forward_to = [loki.write.loki.receiver]
+
+    stage.json {
+        expressions = {
+            event_id    = "event_id",
+            computer    = "computer",
+            timeCreated = "timeCreated",
+            message     = "message",
+        }
+    }
+
+    stage.labels {
+        values = {
+            event_id    = "",
+            computer    = "",
+        }
+    }
+
+    stage.timestamp {
+        source = "timeCreated"
+        format = "RFC3339"
+    }
+}
+
+// ============================================
+// Setup Logs (Установка/Удаление - альтернативный журнал)
+// ============================================
+loki.source.windowsevent "setup" {
+    eventlog_name          = "Setup"
+    xpath_query            = "*"
+    bookmark_path          = "./bookmark-setup.xml"
+    poll_interval          = "0s"
+    use_incoming_timestamp = true
+    forward_to             = [loki.process.setup.receiver]
+    labels                 = {
+        job      = "windows_setup",
+        host     = constants.hostname,
+    }
+}
+
+loki.process "setup" {
+    forward_to = [loki.write.loki.receiver]
+
+    stage.json {
+        expressions = {
+            event_id    = "event_id",
+            computer    = "computer",
+            timeCreated = "timeCreated",
+            message     = "message",
+        }
+    }
+
+    stage.labels {
+        values = {
+            event_id    = "",
+            computer    = "",
+        }
+    }
+
+    stage.timestamp {
+        source = "timeCreated"
+        format = "RFC3339"
+    }
+}
+
+// ============================================
+// Sysmon Logs (Детальная информация о процессах)
+// ============================================
+loki.source.windowsevent "sysmon" {
+    eventlog_name          = "Microsoft-Windows-Sysmon/Operational"
+    xpath_query            = "*"
+    bookmark_path          = "./bookmark-sysmon.xml"
+    poll_interval          = "0s"
+    use_incoming_timestamp = true
+    forward_to             = [loki.process.sysmon.receiver]
+    labels                 = {
+        job      = "windows_sysmon",
+        host     = constants.hostname,
+    }
+}
+
+loki.process "sysmon" {
+    forward_to = [loki.write.loki.receiver]
+
+    stage.json {
+        expressions = {
+            event_id    = "event_id",
+            computer    = "computer",
+            timeCreated = "timeCreated",
+            event_data  = "event_data",
+            message     = "message",
+        }
+    }
+
+    stage.regex {
+        source     = "event_data"
+        expression = "<Data Name='Image'>(?P<image>[^<]+)</Data>"
+    }
+    stage.regex {
+        source     = "event_data"
+        expression = "<Data Name='CommandLine'>(?P<command_line>[^<]+)</Data>"
+    }
+    stage.regex {
+        source     = "event_data"
+        expression = "<Data Name='ProcessGuid'>(?P<process_guid>[^<]+)</Data>"
+    }
+    stage.regex {
+        source     = "event_data"
+        expression = "<Data Name='ProcessId'>(?P<process_id>[^<]+)</Data>"
+    }
+    stage.regex {
+        source     = "event_data"
+        expression = "<Data Name='User'>(?P<user>[^<]+)</Data>"
+    }
+
+    stage.labels {
+        values = {
+            event_id     = "",
+            image        = "",
+            command_line = "",
+            user         = "",
+        }
+    }
+
+    stage.timestamp {
+        source = "timeCreated"
+        format = "RFC3339"
+    }
+}
+
+// ============================================
+// Loki Write
+// ============================================
+loki.write "loki" {
+    endpoint {
+        url = "http://192.168.100.209:3116/loki/api/v1/push"
+    }
+}
