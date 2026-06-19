@@ -1,5 +1,5 @@
 // ============================================
-// USB Logs (Подключение внешних устройств)
+// USB Logs (Подключение внешних устройств) - ИСПРАВЛЕННАЯ ВЕРСИЯ
 // ============================================
 loki.source.windowsevent "usb" {
     eventlog_name          = "Microsoft-Windows-DriverFrameworks-UserMode/Operational"
@@ -27,7 +27,7 @@ loki.process "usb" {
         }
     }
 
-    // Извлекаем серийный номер из InstanceId (это ваш SDI номер)
+    // Извлекаем серийный номер из InstanceId
     stage.regex {
         source     = "event_data"
         expression = "#(?P<usb_serial>[^#]+)"
